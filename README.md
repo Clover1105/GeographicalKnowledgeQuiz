@@ -1,0 +1,2 @@
+# GeographicalKnowledgeQuiz
+关于地理知识的RAG问答系统
