@@ -3844,3 +3844,15 @@ def delete_user(username):
         MySQLUtil.close_mysql_conn(cur, conn)
 ```
 
+## （四）添加agent智能体
+
+<a href=".\AgentServer.md" target="_blank">在新窗口打开 AgentServer.md 笔记</a>
+
+## （五）服务器部署到Docker
+
+<a href="..\Stu_AI\Notbook\17-Docker部署.md" target="_blank">在新窗口打开 Docker部署.md 笔记</a>
+
+## （六）优化向量数据库
+
+
+

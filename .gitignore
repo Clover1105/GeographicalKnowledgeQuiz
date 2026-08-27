@@ -149,6 +149,7 @@ activemq-data/
 
 # Environments
 .env
+.env.local
 .envrc
 .venv
 env/
@@ -221,3 +222,6 @@ __marimo__/
 GeographyServer/geo_chromadb/
 GeographyServer/processed_data/
 GeographyServer/scripts/
+GeographyAgentServer/geo_chromadb/
+GeographyAgentServer/processed_data/
+GeographyAgentServer/scripts/

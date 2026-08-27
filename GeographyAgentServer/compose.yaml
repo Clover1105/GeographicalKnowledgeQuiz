@@ -1,0 +1,21 @@
+services:
+  geography-agent-server:
+    image: geography-agent-server:latest
+    container_name: geography-agent-server
+
+    env_file:
+      - .env
+
+    environment:
+      DOCKER_ENV: "true"
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - /mnt/g/models:/models
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    gpus: all
