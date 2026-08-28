@@ -80,9 +80,21 @@
         </div>
       </div>
 
+      <!-- 用户信息 -->
       <div class="user-info">
-        <el-avatar :size="32" src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png" />
-        <span class="username">{{ username || '未登录' }}</span>
+        <el-dropdown placement="top" trigger="click">
+          <div class="user-trigger" style="display: flex; align-items: center; cursor: pointer;">
+            <el-avatar :size="32" src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png" />
+            <span class="username" style="margin-left: 8px;">{{ username || '未登录' }}</span>
+          </div>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item>
+                <el-button type="text" @click="logout">退出登录</el-button>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
 
@@ -146,6 +158,10 @@
 import { ref, getCurrentInstance, onMounted, nextTick } from 'vue';
 import { ElMessage } from "element-plus";
 import { Plus, Delete, Search, Loading } from '@element-plus/icons-vue';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
+// 路由跳转
+import { useRouter } from "vue-router";
+let router = useRouter();
 
 let proxy = getCurrentInstance().proxy;
 
@@ -175,7 +191,7 @@ function scrollToBottom() {
 }
 
 // 聊天
-function sendQuestion() {
+const sendQuestion = async() => {
   let que = question.value.trim();
   if (que.length === 0) {
     ElMessage.warning("请输入有效内容！");
@@ -190,49 +206,45 @@ function sendQuestion() {
   scrollToBottom();
 
 
-  let urlSearchParams = new URLSearchParams({
+  // 构造SSE请求 -- fetch-event-source
+  // 创建参数对象   // URLSearchParams 是浏览器原生提供的一个对象。它的唯一作用，就是把一个键值对字典，转换成符合网络标准的 URL 查询参数格式。
+  let urlSerchParams = new URLSearchParams({
     question: que,
-    historyId: currentChatId.value,
+    historyId: currentChatId.value
   });
 
-  let ans = '';
+  // 定义拼接字符串变量
+  let s = "";
 
-  fetch("http://localhost:8000/chat/chat?" + urlSearchParams.toString(), {
-    method: 'GET',
-    headers: { 'Authorization': `Bearer ${token}` }
-  }).then(async (response) => {
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      let parts = buffer.split('\n\n');
-      buffer = parts.pop();
-      for (let part of parts) {
-        let line = part.split('\n').find(l => l.startsWith('data:'));
-        if (!line) continue;
-        let data = JSON.parse(line.slice(5).trim()).content;
-        if (data === "end_end") {
-          isSendQuestion.value = false;
-          save_new_dialogue(que, ans);
-          scrollToBottom();
-          return;
-        }
-        ans += data;
-        messages.value[messages.value.length - 1].content = ans;
-        scrollToBottom();
+  // 创建请求对象
+  await fetchEventSource(
+      "http://localhost:8000/chat/chat?"+urlSerchParams.toString(),{
+        method: "POST",
+        headers: { 'Authorization':`Bearer ${token}`},
+        // 三个监听事件：
+        // 1. 监听服务器响应的流式数据
+        onmessage(e){
+          // console.log('msg', e)
+          // 取出数据为json格式，转换为js对象
+          let data = JSON.parse(e.data).content;
+          if (data === "end_end"){
+            isSendQuestion.value = false;// 聊天结束，恢复按钮可用
+            save_new_dialogue(que, s) // 保存对话结果
+            // fetchEventSource 收到onclose 或手动 abort 才会停
+            return;
+          }
+          s += data;  // 拼接字符串
+          messages.value[messages.value.length - 1].content = s;  // 更新数据，替换思考
+        },
+        // 2. 监听错误的发送、连接中断的发生
+        onerror(err){
+          console.log("SSE获取数据失败",err);
+          throw err;  //抛出错误才会真正停止重连
+        },
+        // 可选：禁止自动重连（出错即停）
+        openWhenHidden: true,
       }
-    }
-  }).catch((e) => {
-    console.log("SSE获取数据失败", e);
-    isSendQuestion.value = false;
-    ElMessage.error("连接服务器失败");
-  });
+  );
 }
 
 // 历史记录栏
@@ -366,6 +378,31 @@ function cleraSearch() {
   searchInput.value = '';
   isSearch.value = true;
   get_history();
+}
+
+// 退出登陆
+function logout() {
+  console.log("退出登陆");
+  proxy.$axios({
+    url: '/users/logout',
+    method: 'post',
+    headers: { 'Authorization':`Bearer ${token}` },
+  }).then((res) => {
+    console.log('退出登陆结果：', res.data);
+    let code = res.data.code;
+    let message = res.data.msg;
+    if (code === 200) {
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("username");
+      router.push("/");
+    } else {
+      console.log("退出登陆失败：", message);
+    }
+  }).catch(err => {
+      // 即使网络错误，也建议强制清除本地缓存并跳转
+      sessionStorage.removeItem("token");
+      router.push("/");
+  });
 }
 
 onMounted(() => {

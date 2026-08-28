@@ -1,11 +1,11 @@
-import os
+import os, time
 from fastapi import HTTPException, status
 
 from common import RedisUtil
 
 from datetime import datetime, timezone, timedelta
 
-from jose import jwt, JWSError
+from jose import jwt, JWSError, ExpiredSignatureError
 
 
 # 创建 token
@@ -84,6 +84,60 @@ def verify_token(token):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+# 获取token剩余生存时间
+def get_token_remaining_ttl(token):
+    """
+    解析 token 获取剩余过期秒数
+    如果 token 已过期，返回 0
+    """
+    try:
+        # options={"verify_exp": False} 表示即使过期了也要把数据解出来，以便我们算时间
+        # 解析 token 获取剩余过期秒数
+        payload = jwt.decode(
+            token=token,
+            key=os.getenv('SECURITY_KEY'),
+            algorithms=[os.getenv('ALGORITHM')],
+            options={"verify_exp": False}
+        )
+        # 获取过期时间
+        exp_time = payload.get("exp")
+        if exp_time:
+            # 计算剩余时间
+            remaining = int(exp_time - time.time())
+            return max(0, remaining)
+    except ExpiredSignatureError:   # 过期签名错误
+        return 0
+
+# 加入黑名单
+def add_to_blacklist(token):
+    # 将 token 加入redis黑名单，TTL 为 token 的剩余有效期
+    ttl = get_token_remaining_ttl(token)
+    if ttl > 0:
+        redis_conn = RedisUtil.get_redis_conn()
+        try:
+            redis_conn.setex(f"blacklist:{token}", ttl, "logout")
+        except Exception as e:
+            print(f"将 token 加入redis黑名单失败：{e}")
+        finally:
+            RedisUtil.close_redis_conn(redis_conn)
+
+# 查看黑名单
+def check_blacklist(token):
+    """
+    检查 token 是否在黑名单中
+    返回 True 表示在黑名单中（已注销），False 表示正常
+    """
+    redis_conn = RedisUtil.get_redis_conn()
+    try:
+        # exists 方法返回 1 表示存在，0 表示不存在
+        exists = redis_conn.exists(f"blacklist:{token}")
+        print(type(exists))
+        return bool(exists)
+    except Exception as e:
+        print(f"检查 token 是否在黑名单中失败：{e}")
+        return False
+    finally:
+        RedisUtil.close_redis_conn(redis_conn)
 
 
 

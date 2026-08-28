@@ -6,7 +6,7 @@ chat_router = APIRouter()
 
 from chat.service import ChatService
 from chat.utils.JWTDecodeUtil import decode_token
-@chat_router.get(
+@chat_router.post(
     path='/chat',
     summary='聊天接口',
     description="SSE流式输出"

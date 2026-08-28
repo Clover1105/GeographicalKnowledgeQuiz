@@ -246,7 +246,7 @@ def verify_password(verify_password_entity):
         }
 
     # 生成token
-    token = create_token(sql_id)
+    token = create_token(sql_id, sql_username)
 
     return {
         "code": 200,
@@ -297,32 +297,30 @@ def sign_up(sign_up_entity):
             "msg": f"注册账号失败：{e}"
         }
 
-""" ===== 删除用户 ===== """
-# 从 redis 中删除用户的 token
-def delete_token_from_redis(sql_id):
-    try:
-        conn = RedisUtil.get_redis_conn()
-        conn.delete(sql_id)
-        RedisUtil.close_redis_conn(conn)
-        print(f"删除 token 成功")
-        return {
-            "code": 200,
-            "msg": "删除 token 成功"
-        }
-    except Exception as e:
+""" ===== 用户退出登录 ===== """
+def logout_user(token):
+    """
+    处理退出登录
+    1. 验证 token 格式是否正确（防止恶意调用）
+    2. 将 token 加入黑名单
+    """
+    if not token:
         return {
             "code": 500,
-            "msg": f"删除 token 失败：{e}"
+            "msg": "token 为空"
         }
-def delete_user(username,email):
-    sel_result = UsersDao.check_user(username, email)
-    # print(f"查询到用户信息：{sel_result}")
-    sql_id = sel_result.get("id")
-    # print(f"要删除的用户id：{sql_id}")
-    del_result = UsersDao.delete_user(username)
-    print(f"删除用户信息结果：{del_result}")
-    delete_token_from_redis(sql_id)
+
+    # 验证token是否合法
+    try:
+        result=JWTTokenUtil.verify_token(token)
+        username = result.get('data').get('name')
+    except Exception:
+        return 0
+    # 如果 token 本身已经过期或无效，没必要加黑名单，工具会直接返回报错信息到客户端
+    # 将未过期的token加入黑名单
+    JWTTokenUtil.add_to_blacklist(token)
+    print(f"用户 {username} 退出登录，Token 已加入黑名单")
     return {
         "code": 200,
-        "msg": "删除用户成功"
+        "msg": f"用户{username}退出登录成功，token已加入黑名单"
     }

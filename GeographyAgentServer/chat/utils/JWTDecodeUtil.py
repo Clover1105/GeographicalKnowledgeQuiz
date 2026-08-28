@@ -11,6 +11,16 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/verifyCaptcha")
 def decode_token(token: str = Depends(oauth2_scheme)):
     # 只有验证通过才能继续往下执行代码
     result = JWTTokenUtil.verify_token(token)
+
+    # 查看token是否在黑名单中
+    if JWTTokenUtil.check_blacklist(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="token已被注销（用户已退出登录），请重新登录",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # 获取用户信息
     user_id = result.get("data").get("id")
     if user_id is None:
         raise  HTTPException(

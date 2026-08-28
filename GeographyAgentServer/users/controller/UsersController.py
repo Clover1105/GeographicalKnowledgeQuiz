@@ -47,18 +47,21 @@ def sign_up(sign_up_entity: SignUpEntity):
     print(f"接收到用户信息（注册用户）：{sign_up_entity}")
     return UsersService.sign_up(sign_up_entity)
 
-# 删除用户接口
-from fastapi import Depends
+# 用户退出登陆接口
+from fastapi import Depends,Header
 from chat.utils.JWTDecodeUtil import decode_token
-@users_router.delete(
-    path='/deleteUser',
-    summary='删除用户'
+from typing import Optional
+@users_router.post(
+    path='/logout',
+    summary='用户退出登陆，将token放入黑名单'
 )
-def delete_user(now_user = Depends(decode_token)):
-    username = now_user.get("name")
-    email = now_user.get("email")
-    print(f"接收到用户信息（删除用户）：{username}")
-    return UsersService.delete_user(username,email)
+def logout_user(authorization: Optional[str] = Header(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+    # username = now_user.get("name")
+    # print(f"接收到用户信息（用户退出登录）：{username}")
+    return UsersService.logout_user(token)
 
 # 测试
 if __name__ == '__main__':
