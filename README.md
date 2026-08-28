@@ -3854,5 +3854,126 @@ def delete_user(username):
 
 ## （六）优化向量数据库
 
+`GeoDataBuild.py`：
 
+```python
+# 将向量化后的数据集存入向量数据库
 
+import os
+import json
+from dotenv import load_dotenv
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
+from ai.LoadEmbeddingModel import load_embedding_model
+
+if os.getenv("DOCKER_ENV") != "true":
+    result = load_dotenv("../.env.local")
+    print(f"DEBUG: load_dotenv result={result}")  # False 表示文件未找到或解析失败
+
+# 处理数据集 -- 数据集路径、向量数据库路径、集合名称
+database_path = os.getenv("DATABASE_PATH")
+print(f"DEBUG: DATABASE_PATH={database_path}")  # 调试用，确认后删除
+chromadb_path = os.getenv("CHROMADB_PATH")
+collection_name = os.getenv("COLLECTION_NAME")
+
+# 读取数据
+documents = []
+with open(database_path, "r", encoding="utf-8") as f:
+    for line in f:
+        line = line.strip() # 去除换行符
+        if not line:
+            continue
+        item = json.loads(line)
+        # 将问题和答案拼接
+        content = item['question']
+        # 转为Document格式
+        doc = Document(
+            page_content=content,   # 只嵌入问题
+            metadata = {
+                # 检索时，从返回结果的 metadata["answer"] 中获取答案即可
+                "answer":item["answer"],    # 答案存入元数据
+                "score": item.get("source",database_path),
+                "category":item.get("category",""),
+                "question": item["question"]
+            }
+        )
+        documents.append(doc)
+
+# 将数据集存入向量数据库
+# 处理好的数据集、向量化模型、向量数据库路径、集合名称、匹配规则（余弦相似度）
+try:
+    Chroma.from_documents(
+        documents,
+        embedding= load_embedding_model(),
+        persist_directory=chromadb_path,
+        collection_name=collection_name,
+        collection_metadata={"hnsw:space": "cosine"}
+    )
+    print("数据集存入向量数据库成功")
+except Exception as e:
+    print(f"数据集存入向量数据库失败: {e}")
+```
+
+修改工具文件`ChromadbTool.py`：
+
+```python
+# 重排序
+def re_reranker(data):
+    print("\n开始重排：")
+
+    # 创建重排序模型对象
+    reranker = load_reranker()
+
+    # 获取检索结果
+    cons = data['context']
+    print(f"重排序前获取所有检索结果：\n{cons}\n")
+
+    # 获取问题
+    que = data['question']
+    # print(f"问题：\n{que}\n")
+
+    # 问题和召回文档 进行包装 构造reranker输入
+    # 因为重排序模型（Reranker / Cross-Encoder）的输入格式就是 (query, document) 这样的"问题-文档对"
+    # 重排序输入仍用 page_content（问题）与 query 匹配
+    reranker_input = [(que, con.page_content) for con in cons]
+
+    # 调用重排序模型，计算得分
+    scores = reranker.compute_score(reranker_input)
+    # print(f"重排序后分数：\n{scores}\n")
+
+    # 将文档和分数包装，方便根据分数排序
+    con_score = list(zip(cons, scores))
+
+    # 排序
+    con_score.sort(key=lambda x: x[1], reverse=True)
+    print(f"重排序后文档内容：")
+    # print(con_score)
+    # 返回排序后的文档（向量数据库中的问题）
+    cons =  [con[0] for con in con_score]
+    print(cons)
+
+    # 返回给 LLM 的 context 改为从 metadata 中取答案
+    cons_with_answer = [con.metadata.get("answer", con.page_content) for con in cons]
+
+    # 返回结果
+    for i,item in enumerate(cons[:10]):
+        print(f"【第{i + 1}条】\n问题：{item.page_content}")
+        print(f"答案：{item.metadata.get('answer', 'N/A')}")
+        print("-*-"*20)
+        return {
+            "context":cons_with_answer,
+            "question":que
+        }
+```
+
+## （七）修改登陆方式
+
+两种登陆方式：【用户名+密码】和【邮箱+验证码】
+
+整个登录页分为两种互斥的模式，通过顶部切换按钮控制。
+
+用户名登陆模式下，表单只展示"用户名"和"密码"两个输入框，底部功能按钮只有"注册"和"登陆"，点击"登陆"时直接将用户名和密码提交给后端验证，验证通过即跳转聊天页；
+
+邮箱登陆模式下，表单只展示"邮箱号"和"验证码"两个输入框，底部功能按钮只有"注册"和"发送验证码"，点击"发送验证码"后向后端请求发送邮件，发送成功后禁用邮箱输入框，同时该按钮文字变为"登陆"，
+
+用户填入收到的验证码后点击"登陆"完成验证并跳转。

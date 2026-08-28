@@ -8,17 +8,12 @@ def check_user(username, email):
     # MySQL操作
     if email:
         sql = "select * from users where email = %s;"
-        data = email
-    elif username:
+        # 执行操作
+        cur.execute(sql, email)
+    if username:
         sql = "select * from users where name = %s;"
-        data = username
-    else:
-        return {
-            "code": 500,
-            "msg": "邮箱和用户名不能同时为空，必须二选一"
-        }
-    # 执行操作
-    cur.execute(sql, data)
+        # 执行操作
+        cur.execute(sql, username)
     # 获取结果
     result = cur.fetchone()
     # print(f"查询用户信息结果：{type(result)}")

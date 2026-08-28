@@ -8,8 +8,6 @@ from users.dao import UsersDao
 from users.utils import PasswordHashUtil, JWTTokenUtil
 
 
-
-""" ===== 发送邮件 ===== """
 # 验证用户是否存在
 def check_user(username, email):
     # isinstance(a,b)：返回布尔，判断a是不是b类型（b的实例）
@@ -23,6 +21,17 @@ def check_user(username, email):
         print(f"用户是否存在：{flag}")
         return flag, None
 
+# 生成token
+def create_token(sql_id,sql_username):
+    payload = {"id": sql_id,"name": sql_username}
+    jwt_result = JWTTokenUtil.save_token_to_redis(payload)
+    if jwt_result.get("code") != 200:
+        return jwt_result
+    token = jwt_result.get("data")
+    print(f"生成 token 成功：{token}")
+    return token
+
+""" ===== 发送邮件 ===== """
 # 生成验证码
 def create_captcha():
     captcha = ""
@@ -72,8 +81,7 @@ def captcha_email(captcha_email_entity):
     # 取出用户信息
     username = captcha_email_entity.username
     email = captcha_email_entity.email
-    password = captcha_email_entity.password
-    # print(f"用户信息：{username}, {email}, {password}")
+    # print(f"用户信息：{username}, {email}")
 
     # 验证用户是否存在
     flag,result = check_user(username, email)
@@ -89,20 +97,8 @@ def captcha_email(captcha_email_entity):
     # 提取信息
     sql_id = result.get("id")
     sql_email = result.get("email")
-    sql_password = result.get("password")
 
     # 如果用户存在，则进行以下操作
-
-    # 判断密码是否正确
-    result = PasswordHashUtil.verify_password(password, sql_password)
-    print(f"判断密码是否正确结果：{result}")
-
-    # 密码不正确
-    if not result:
-        return {
-            "code": 500,
-            "msg": f"密码不正确"
-        }
 
     # 生成验证码
     captcha = create_captcha()
@@ -180,13 +176,12 @@ def get_captcha_from_redis(sql_id):
 def verify_captcha(verify_captcha_entity):
     print("这里是验证验证码 -- UsersService")
     # 取出用户信息
-    username = verify_captcha_entity.username
     email = verify_captcha_entity.email
     captcha = verify_captcha_entity.captcha
-    # print(f"验证验证码--用户信息：{username}, {email}, {password},{captcha}")
+    # print(f"验证验证码--用户信息：{email}, {captcha}")
 
     # 获取用户信息
-    result = check_user(username, email)[1]
+    result = check_user(None, email)[1]
     # print(f"验证验证码，获取用户所有信息：{result}\n信息返回类型{type(result)}")
     sql_id = result.get("id")
     sql_username = result.get("name")
@@ -214,12 +209,7 @@ def verify_captcha(verify_captcha_entity):
     print("验证码验证成功")
 
     # 生成 token
-    payload = {"id": sql_id}
-    jwt_result = JWTTokenUtil.save_token_to_redis(payload)
-    if jwt_result.get("code") != 200:
-        return jwt_result
-    token = jwt_result.get("data")
-    print(f"生成 token 成功：{token}")
+    token = create_token(sql_id, sql_username)
 
     return {
         "code": 200,
@@ -229,6 +219,44 @@ def verify_captcha(verify_captcha_entity):
             "username": sql_username,
         }
     }
+
+
+
+""" ===== 验证密码 ===== """
+# 验证密码
+def verify_password(verify_password_entity):
+    print("这里是验证密码 -- UsersService")
+    # 取出用户信息
+    username = verify_password_entity.username
+    password = verify_password_entity.password
+
+    # 获取用户信息
+    result = check_user(username, None)[1]
+    sql_username = result.get("name")
+    sql_password = result.get("password")
+    sql_id = result.get("id")
+
+    # 判断密码是否正确
+    result = PasswordHashUtil.verify_password(password, sql_password)
+    print(f"判断密码是否正确结果：{result}")
+    if not result:
+        return {
+            "code": 500,
+            "msg": "密码错误"
+        }
+
+    # 生成token
+    token = create_token(sql_id)
+
+    return {
+        "code": 200,
+        "msg": "验证密码成功",
+        "data": {
+            "token": token,
+            "username": sql_username,
+        }
+    }
+
 
 
 """ ===== 注册账号 ===== """

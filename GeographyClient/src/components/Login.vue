@@ -34,7 +34,6 @@
           <input
             type="text"
             v-model="username"
-            :disabled="isAvailable"
             placeholder="请输入用户名"
             class="form-input"
           />
@@ -51,18 +50,17 @@
           />
         </div>
 
-        <div class="form-item">
+        <div class="form-item" v-show="!isShow">
           <label class="form-label">密码</label>
           <input
             type="password"
             v-model="password"
-            :disabled="isAvailable"
             placeholder="请输入密码"
             class="form-input"
           />
         </div>
 
-        <div class="form-item">
+        <div class="form-item" v-show="isShow">
           <label class="form-label">验证码</label>
           <input
             type="text"
@@ -78,16 +76,16 @@
         <button class="btn-secondary" @click="goSignUp">注册</button>
 
         <button
-          v-show="!iscaptcha"
+          v-show="!isShow || (isShow && !iscaptcha)"
           class="btn-primary"
           @click="goChat"
-          :disabled="captcha.length === 0"
+          :disabled="password.length === 0 && captcha.length === 0"
         >
           登陆
         </button>
 
         <button
-          v-show="iscaptcha"
+          v-show="isShow && iscaptcha"
           class="btn-primary btn-captcha"
           @click="captchaEmail"
         >
@@ -138,14 +136,14 @@ let isAvailable = ref(false);
 // 判断登陆方式
 function loginMethod() {
   if (isShow.value) {
-    // 邮箱登录模式：只传 email，username留空
+    // 邮箱登录模式：只传 email，则username和password留空
     return {
       username: "",
       email: email.value,
-      password: password.value,
+      password: "",
     };
   } else {
-    // 用户名登录模式：只传 username，email留空
+    // 用户名登录模式：只传 username，则email留空
     return {
       username: username.value,
       email: "",
@@ -154,7 +152,7 @@ function loginMethod() {
   }
 }
 
-// 发送验证码邮件函数 -- 向服务器发送请求，验证用户信息
+// 邮箱登录模式：发送验证码邮件函数 -- 向服务器发送请求，验证用户信息
 function captchaEmail() {
   console.log("开始验证用户信息：");
   let userInformation = loginMethod();
@@ -179,13 +177,49 @@ function captchaEmail() {
   isAvailable.value = true;
 }
 
-// 验证验证码是否正确
-function goChat() {
+function goChat(){
+  if (!isShow.value) {
+    // 用户名模式：直接用户名+密码登录
+    loginByUsername();
+  } else {
+    // 邮箱模式：验证验证码
+    loginByEmail();
+  }
+}
+
+// 用户名模式：直接用户名+密码登录
+function loginByUsername() {
+  console.log("开始验证密码是否正确：");
+  let userInformation = loginMethod();  // 用户名+密码
+  proxy
+    .$axios({
+      url: "users/verifyPassword",
+      method: "post",
+      data: userInformation,
+    })
+    .then((res) => {
+      console.log("登录的返回结果：", res.data);
+      let code = res.data.code;
+      let message = res.data.msg;
+      let data = res.data.data;
+      if (code === 200) {
+        sessionStorage.setItem("username", data.username);
+        sessionStorage.setItem("token", data.token);
+        ElMessage.success(message);
+        setTimeout(() => {
+          router.push("/chat");
+        }, 1000);
+      } else {
+        ElMessage.error(message);
+      }
+    });
+}
+
+// 邮箱模式：验证验证码
+function loginByEmail() {
   console.log("开始验证验证码是否正确：");
   let userInformation = {
-    username: username.value,
     email: email.value,
-    password: password.value,
     captcha: captcha.value,
   };
   proxy

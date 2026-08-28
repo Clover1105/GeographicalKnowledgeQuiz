@@ -16,6 +16,16 @@ def captcha_email(captcha_email_entity: CaptchaEmailEntity):
     return UsersService.captcha_email(captcha_email_entity)
 
 
+# 创建验证密码接口
+from users.entity.VerifyPasswordEntity import VerifyPasswordEntity
+@users_router.post(
+    path='/verifyPassword',
+    summary='验证密码'
+)
+def verify_password(verify_password_entity: VerifyPasswordEntity):
+    print(f"接收到用户信息（验证密码）：{verify_password_entity}")
+    return UsersService.verify_password(verify_password_entity)
+
 # 创建验证验证码接口
 from users.entity.VerifyCaptchaEntity import VerifyCaptchaEntity
 @users_router.post(

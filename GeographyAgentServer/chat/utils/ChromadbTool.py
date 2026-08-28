@@ -46,9 +46,9 @@ def query_geo(question: str):
         print(f"\n{t}到的文档内容：")
         # print(result)
         print("*-" * 20)
-        # for i in result:
-        #     print(i.page_content)
-        #     print("*-" * 20)
+        for i in result:
+            print(i.page_content)
+            print("*-" * 20)
 
     # 重排序
     def re_reranker(data):
@@ -59,7 +59,7 @@ def query_geo(question: str):
 
         # 获取检索结果
         cons = data['context']
-        # print(f"检索结果：\n{cons}\n")
+        print(f"重排序前获取所有检索结果：\n{cons}\n")
 
         # 获取问题
         que = data['question']
@@ -67,6 +67,7 @@ def query_geo(question: str):
 
         # 问题和召回文档 进行包装 构造reranker输入
         # 因为重排序模型（Reranker / Cross-Encoder）的输入格式就是 (query, document) 这样的"问题-文档对"
+        # 重排序输入仍用 page_content（问题）与 query 匹配
         reranker_input = [(que, con.page_content) for con in cons]
 
         # 调用重排序模型，计算得分
@@ -80,21 +81,26 @@ def query_geo(question: str):
         con_score.sort(key=lambda x: x[1], reverse=True)
         print(f"重排序后文档内容：")
         # print(con_score)
-        # 返回排序后的文档
+        # 返回排序后的文档（向量数据库中的问题）
         cons =  [con[0] for con in con_score]
+        print(cons)
+
+        # 返回给 LLM 的 context 改为从 metadata 中取答案
+        cons_with_answer = [con.metadata.get("answer", con.page_content) for con in cons]
 
         # 返回结果
         for i,item in enumerate(cons[:10]):
-            print(f"【第{i + 1}条】：{item.page_content}")
+            print(f"【第{i + 1}条】\n问题：{item.page_content}")
+            print(f"答案：{item.metadata.get('answer', 'N/A')}")
         print("-*-"*20)
         return {
-            "context":cons,
+            "context":cons_with_answer,
             "question":que
         }
 
     # 创建提示词
     template = """
-        你是一名知识库问答助手，请结合提供的知识内容回答用户问题。
+        你是一名地理知识库问答助手，请结合提供的知识内容回答用户问题。
         回答要求：
             - 仅依据提供的知识内容进行回答，不补充未出现的信息。
             - 若知识内容无法回答问题，请明确说明当前知识不足，避免推测或编造。
