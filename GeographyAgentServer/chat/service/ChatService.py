@@ -1,6 +1,7 @@
 import main
 from langchain_core.messages import AIMessageChunk
 from chat.service import HistoryService
+from chat.utils import OptimizationProblemUtil,ContextCompressionUtil
 
 def chat(question: str,historyId:int,username:str):
     # 判断是否为新对话框
@@ -8,20 +9,30 @@ def chat(question: str,historyId:int,username:str):
         history_list = []
     else:
         # 不是新对话，调用查询详细记录函数（包装查询详细历史记录结果函数）
-        history_list = HistoryService.history_dialogue(historyId, username)['data'][-6:]
-    print(f"历史记录\n：{history_list}")
+        history_list = HistoryService.history_dialogue(historyId, username)['data']
+    print(f"历史记录：\n{history_list}")
 
     # 多轮对话
-    message = []
-    for i in history_list:
-        message.append({'role':'user','content':i.get('question')})
-        message.append({'role':'system','content':i.get('answer')})
-    message.append({'role':'user','content':question})
+    # 工具里面已经将数据处理好了，问题和回答已经分开了，可以直接用
+    messages = history_list
+
+    # 上下文压缩处理
+    if len(messages) > 12:
+        messages = ContextCompressionUtil.compress_context(history_list,main.llm)
+        print(f"压缩后消息：\n{messages}")
+
+    # 优化用户问题
+    print(f"原始问题: {question}")
+    question = OptimizationProblemUtil.optimize_problem(question,history_list,main.llm)
+    print(f"重写后问题: {question}")
+
+    # 将【重写后的问题】追加到消息列表中
+    messages.append({'role':'user','content':question})
 
     # 调用智能体工具
     print("调用智能体工具")
 
-    for chunk,metadata in main.agent.stream({"messages":message},stream_mode='messages'):
+    for chunk,metadata in main.agent.stream({"messages":messages},stream_mode='messages'):
         # print(type(chunk))  # <class 'langchain_core.messages.ai.AIMessageChunk'>
 
         # 筛选有效数据

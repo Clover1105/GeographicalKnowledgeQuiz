@@ -30,20 +30,20 @@ def history_dialogue(historyId,username):
     print(result[0]['username'])
     if result[0]['username'] != username:
         raise HTTPException(status_code=403, detail="无权访问该对话详情")
-    message = []
+    messages = []
     for i in result:
-        message.append({
+        messages.append({
             'role':'user',
             'content':i['question']
         })
-        message.append({
-            'role':'system',
+        messages.append({
+            'role':'assistant',
             'content':i['answer']
         })
     return {
         "code": 200,
         "msg": "获取历史对话详情成功",
-        "data": message
+        "data": messages
     }
 
 # 删除历史记录
